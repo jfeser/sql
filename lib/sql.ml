@@ -244,6 +244,60 @@ module Schema = struct
   let print x = prerr_endline (to_string x)
 end
 
+module Op = struct
+  open Base
+
+  type num_op = [ `Add | `Sub | `Mul | `Div | `Mod ] [@@deriving sexp]
+
+  type bool_op = [ `And | `Or | `Not ] [@@deriving sexp]
+
+  type cmp_op = [ `Eq | `Neq | `Ge | `Le | `Gt | `Lt ] [@@deriving sexp]
+
+  type bit_op = [ `Bit_and | `Bit_not | `Bit_or | `Lsh | `Rsh ]
+  [@@deriving sexp]
+
+  type agg_op = [ `Count | `Avg | `Sum | `Min | `Max ] [@@deriving sexp]
+
+  type binop =
+    [ `Add
+    | `And
+    | `Div
+    | `Eq
+    | `Ge
+    | `Gt
+    | `Le
+    | `Lt
+    | `Mod
+    | `Mul
+    | `Or
+    | `Sub ]
+  [@@deriving sexp]
+
+  type unop = [ `IsNull | `Not ] [@@deriving sexp]
+
+  type op =
+    [ num_op
+    | bool_op
+    | cmp_op
+    | bit_op
+    | agg_op
+    | `Between
+    | `Call of string
+    | `Concat
+    | `In
+    | `Interval of unit
+    | `Is
+    | `IsDistinct
+    | `IsNull
+    | `Ite
+    | `Like
+    | `NotDistinct
+    | `Substring ]
+  [@@deriving sexp]
+end
+
+include Op
+
 type table = string * Schema.t [@@deriving show]
 
 type schema = Schema.t
@@ -284,7 +338,7 @@ type alter_action =
 
 type select_result = schema * param list
 
-type direction = [ `Fixed | `Param of param_id ] [@@deriving show]
+type direction = [ `Asc | `Desc ] [@@deriving show]
 
 type int_or_param = [ `Const of int | `Limit of param ]
 
@@ -297,87 +351,104 @@ type col_name = {
 
 and limit = param list * bool
 
-and nested = source * (source * join_cond) list
+and 'f nested = 'f source * ('f source * 'f join_cond) list
+  constraint 'f = [< op ]
 
-and source1 = [ `Select of select_full | `Table of string | `Nested of nested ]
+and 'f source1 =
+  [ `Select of 'f select_full | `Table of string | `Nested of 'f nested ]
+  constraint 'f = [< op ]
 
-and source = source1 * string option
+and 'f source = 'f source1 * string option constraint 'f = [< op ]
 
-and join_cond =
-  [ `Cross | `Search of expr | `Default | `Natural | `Using of string list ]
+and 'f join_cond =
+  [ `Cross | `Search of 'f expr | `Default | `Natural | `Using of string list ]
+  constraint 'f = [< op ]
 
-and select = {
-  columns : column list;
-  from : nested option;
-  where : expr option;
-  group : expr list;
-  having : expr option;
+and 'f select = {
+  columns : 'f column list;
+  from : 'f nested option;
+  where : 'f expr option;
+  group : 'f expr list;
+  having : 'f expr option;
 }
+  constraint 'f = [< op ]
 
-and select_full = {
-  select : select * select list;
-  order : order;
+and 'f select_full = {
+  select : 'f select * 'f select list;
+  order : 'f order;
   limit : limit option;
 }
+  constraint 'f = [< op ]
 
-and order = (expr * direction option) list
+and 'f order = ('f expr * direction option) list constraint 'f = [< op ]
 
 and 'expr choices = (param_id * 'expr option) list
 
-and expr =
-  | Value of Type.t  (** literal value *)
+and value =
+  | Int of int
+  | Date of string
+  | String of string
+  | Bool of bool
+  | Float of float
+  | Null
+
+and 'f expr =
+  | Value of value  (** literal value *)
+  | Sequence of 'f expr list
   | Param of param
-  | Choices of param_id * expr choices
-  | Fun of Type.func * expr list  (** parameters *)
-  | Select of select_full * [ `AsValue | `Exists ]
+  | Choices of param_id * 'f expr choices
+  | Fun of 'f * 'f expr list  (** parameters *)
+  | Select of 'f select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string  (** inserted value *)
+  constraint 'f = [< op ]
 
-and column =
+and 'f column =
   | All
   | AllOf of string
-  | Expr of expr * string option  (** name *)
+  | Expr of 'f expr * string option  (** name *)
+  constraint 'f = [< op ]
 [@@deriving show { with_path = false }]
 
-type columns = column list [@@deriving show]
+type 'f columns = 'f column list [@@deriving show]
 
-type expr_q =
+type 'f expr_q =
   [ `Value of Type.t  (** literal value *)
   | `Param of param
-  | `Choice of param_id * expr_q choices
-  | `Func of Type.func * expr_q list  (** return type, grouping, parameters *)
-  ]
+  | `Choice of param_id * 'f expr_q choices
+  | `Func of Type.func * 'f expr_q list
+    (** return type, grouping, parameters *) ]
 [@@deriving show]
 
 let expr_to_string = show_expr
 
-type assignments = (col_name * expr) list
+type 'f assignments = (col_name * 'f expr) list
 
-type insert_action = {
+type 'f insert_action = {
   target : string;
   action :
-    [ `Set of assignments option
-    | `Values of string list option * expr list list option
+    [ `Set of 'f assignments option
+    | `Values of string list option * 'f expr list list option
     | (* column names * list of value tuples *)
       `Select of
-      string list option * select_full ];
-  on_duplicate : assignments option;
+      string list option * 'f select_full ];
+  on_duplicate : 'f assignments option;
 }
 
-type stmt =
-  | Create of string * [ `Schema of schema | `Select of select_full ]
+type 'f stmt =
+  | Create of string * [ `Schema of schema | `Select of 'f select_full ]
   | Drop of string
   | Alter of string * alter_action list
   | Rename of (string * string) list
   | CreateIndex of string * string * string list (* index name, table name, columns *)
-  | Insert of insert_action
-  | Delete of string * expr option
-  | Set of string * expr
-  | Update of string * assignments * expr option * order * param list (* where, order, limit *)
-  | UpdateMulti of source list * assignments * expr option
-  | Select of select_full
+  | Insert of 'f insert_action
+  | Delete of string * 'f expr option
+  | Set of string * 'f expr
+  | Update of string * 'f assignments * 'f expr option * 'f order * param list (* where, order, limit *)
+  | UpdateMulti of 'f source list * 'f assignments * 'f expr option
+  | Select of 'f select_full
   | CreateRoutine of
-      string * Type.t option * (string * Type.t * expr option) list
+      string * Type.t option * (string * Type.t * 'f expr option) list
 
 (*
 open Schema

@@ -6,4 +6,3 @@ module Sql_parser = Sql_parser
 module Sql = Sql
 module Stmt = Stmt
 module Tables = Tables
-module Syntax = Syntax

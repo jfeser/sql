@@ -3,9 +3,9 @@
 module type Parser_type = sig
   type token
 
-  type result
+  type 'f result
 
-  val input : (Lexing.lexbuf -> token) -> Lexing.lexbuf -> result
+  val input : (Lexing.lexbuf -> token) -> Lexing.lexbuf -> 'f result
 
   val rule : Lexing.lexbuf -> token
 end

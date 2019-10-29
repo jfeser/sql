@@ -24,17 +24,14 @@ let keywords =
    "as",AS;
    "on",ON;
    "to",TO;
-   "conflict",CONFLICT;
    "using",USING;
    "natural",NATURAL;
    "join",JOIN;
    "between",BETWEEN;
    "and",AND;
-   "escape",ESCAPE;
    "not",NOT;
    "null",NULL;
    "unique",UNIQUE;
-   "primary",PRIMARY;
    "key",KEY;
    "default",DEFAULT;
    "precision",PRECISION;
@@ -78,39 +75,21 @@ let keywords =
    "except",EXCEPT;
    "intersect",INTERSECT;
    "cross",CROSS;
-   "temporary",TEMPORARY;
    "if",IF;
    "exists",EXISTS;
-   "foreign",FOREIGN;
-   "global",GLOBAL;
-   "local",LOCAL;
-   "value",VALUE;
-   "references",REFERENCES;
-   "check",CHECK;
    "date",DATE;
    "time",TIME;
    "timestamp",TIMESTAMP;
-   "alter",ALTER;
    "rename",RENAME;
-   "add",ADD;
-   "cascade",CASCADE;
-   "restrict",RESTRICT;
    "drop",DROP;
-   "constraint",CONSTRAINT;
-   "after",AFTER;
    "index",INDEX;
-   "fulltext",FULLTEXT;
    "unsigned",UNSIGNED;
-   "first",FIRST;
-   "column",COLUMN;
    "like", LIKE;
    "case", CASE;
    "when", WHEN;
    "then", THEN;
    "else", ELSE;
    "end", END;
-   "change", CHANGE;
-   "modify", MODIFY;
    "delayed", DELAYED;
    "enum", ENUM;
    "for", FOR;
@@ -122,8 +101,6 @@ let keywords =
    "of", OF;
    "with", WITH;
    "nowait", NOWAIT;
-   "action", ACTION;
-   "no", NO;
    "is", IS;
    "interval", INTERVAL;
    "microsecond", MICROSECOND;
@@ -157,15 +134,17 @@ let keywords =
    "language", LANGUAGE;
    "substring", SUBSTRING;
    "substr", SUBSTRING;
-  ] in (* more *)
+   "count", COUNT;
+   "sum", SUM;
+   "avg", AVG;
+   "min", MIN;
+   "max", MAX;
+ ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
-  all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";];
-  all DATETIME_FUNC ["getdate"]; (* mssql? *)
   all CONFLICT_ALGO ["ignore"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];
   all LIKE_OP ["glob";"regexp";"match"];
-  all AUTOINCREMENT ["autoincrement";"auto_increment"];
 (* standard built-in types
       CHARACTER, CHARACTER VARYING, CHARACTER LARGE OBJECT,
       BINARY, BINARY VARYING, BINARY LARGE OBJECT,
@@ -258,18 +237,23 @@ ruleMain = parse
 
   | "*" { ASTERISK }
   | "=" { EQUAL }
-  | "!" { EXCL }
   | "~" { TILDE }
   | "||" { CONCAT_OP }
   | "+" { PLUS }
   | "-" { MINUS }
 
-  | "/" | "%" { NUM_DIV_OP }
-  | "<<" | ">>" { NUM_BIT_SHIFT }
-  | "|" { NUM_BIT_OR }
-  | "&" { NUM_BIT_AND }
-  | ">" | ">=" | "<=" | "<" { NUM_CMP_OP }
-  | "<>" | "!=" | "==" { NUM_EQ_OP }
+  | "/" { DIV }
+  | "%" { MOD }
+  | "<<" { LSH }
+  | ">>" { RSH }
+  | "|" { BIT_OR }
+  | "&" { BIT_AND }
+  | ">" { GT }
+  | ">=" { GE }
+  | "<=" { LE }
+  | "<" { LT }
+  | "<>" | "!=" { NEQ }
+  | "==" { EQ }
   | "<=>" { NOT_DISTINCT_OP }
 
   | "?" { PARAM (None,pos lexbuf) }
@@ -345,14 +329,7 @@ ruleCommentMulti acc = parse
 
 {
 
-  let parse_rule lexbuf =
-    let module P = Parser_state in
-    let token = ruleMain lexbuf in
-    match !P.mode with
-    | P.Normal -> token
-    | P.Ignore ->
-(*         eprintf "ignored: %s\n" (lexeme lexbuf); *)
-      if (token = EOF) then token else IGNORED
+  let parse_rule = ruleMain
 
 }
 
