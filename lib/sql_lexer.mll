@@ -33,18 +33,9 @@ let keywords =
    "null",NULL;
    "unique",UNIQUE;
    "key",KEY;
-   "default",DEFAULT;
-   "precision",PRECISION;
-   "varying",VARYING;
-   "charset",CHARSET;
    "collate",COLLATE;
-   "national",NATIONAL;
-   "ascii",ASCII;
-   "unicode",UNICODE;
    "distinct",DISTINCT;
    "character",CHARACTER;
-   "binary",BINARY;
-   "bytea",BINARY;
    "all",ALL;
    "any",ANY;
    "some",SOME;
@@ -83,15 +74,12 @@ let keywords =
    "rename",RENAME;
    "drop",DROP;
    "index",INDEX;
-   "unsigned",UNSIGNED;
    "like", LIKE;
    "case", CASE;
    "when", WHEN;
    "then", THEN;
    "else", ELSE;
-   "end", END;
    "delayed", DELAYED;
-   "enum", ENUM;
    "for", FOR;
    "share", SHARE;
    "mode", MODE;
@@ -126,12 +114,6 @@ let keywords =
    "false", FALSE;
    "true", TRUE;
    "duplicate", DUPLICATE;
-   "function", FUNCTION;
-   "procedure", PROCEDURE;
-   "returns", RETURNS;
-   "begin", BEGIN;
-   "comment", COMMENT;
-   "language", LANGUAGE;
    "substring", SUBSTRING;
    "substr", SUBSTRING;
    "count", COUNT;
@@ -145,24 +127,6 @@ let keywords =
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];
   all LIKE_OP ["glob";"regexp";"match"];
-(* standard built-in types
-      CHARACTER, CHARACTER VARYING, CHARACTER LARGE OBJECT,
-      BINARY, BINARY VARYING, BINARY LARGE OBJECT,
-      NUMERIC, DECIMAL, INTEGER, SMALLINT, BIGINT,
-      FLOAT, REAL, DOUBLE PRECISION,
-      BOOLEAN,
-      DATE, TIME, TIMESTAMP, INTERVAL
-    *)
-  all T_INTEGER ["integer";"int";"smallint";"bigint";"tinyint";"mediumint";"middleint";"serial";"identity"];
-  all T_INTEGER ["numeric";"decimal";"dec";"fixed"];
-  all T_INTEGER ["number"]; (* oracle *)
-  all T_BOOLEAN ["bool";"boolean"];
-  all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
-  all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
-  all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
-  all T_TEXT ["varchar2"]; (* oracle *)
-  all T_DATETIME ["datetime"];
-  all T_UUID ["uuid"]; (* http://www.postgresql.org/docs/9.4/static/datatype-uuid.html *)
   !k
 
 (*

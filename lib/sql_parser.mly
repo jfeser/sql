@@ -26,22 +26,18 @@ Simple SQL parser
 %token <int> LCURLY RCURLY
 %token LPAREN RPAREN COMMA EOF DOT NULL CONFLICT_ALGO SELECT INSERT OR INTO
 CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME LIMIT ORDER
-BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP LIKE TILDE NOT
-BETWEEN AND USING UNION EXCEPT INTERSECT AS TO CONCAT_OP JOIN_TYPE1
-JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING UNIQUE KEY ON IF EXISTS
-PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE
-BINARY CHARACTER DATE TIME TIMESTAMP RENAME DROP INDEX CASE WHEN THEN ELSE END
-DELAYED ENUM FOR SHARE MODE LOCK OF WITH NOWAIT IS INTERVAL SUBSTRING DIV MOD
-LSH RSH BIT_AND BIT_OR GE GT LE LT EQ NEQ FUNCTION PROCEDURE LANGUAGE RETURNS
-OUT INOUT BEGIN COMMENT MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER
-YEAR SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND HOUR_MICROSECOND
-HOUR_SECOND HOUR_MINUTE DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR
-YEAR_MONTH FALSE TRUE DUPLICATE PLUS MINUS NOT_DISTINCT_OP T_INTEGER T_BLOB
-T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID COUNT SUM AVG MIN MAX
+BY DESC ASC EQUAL DELETE FROM OFFSET SET JOIN LIKE_OP LIKE TILDE NOT BETWEEN AND
+USING UNION EXCEPT INTERSECT AS TO CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS
+REPLACE IN GROUP HAVING UNIQUE KEY ON IF EXISTS COLLATE CHARACTER DATE TIME
+TIMESTAMP RENAME DROP INDEX CASE WHEN THEN ELSE DELAYED FOR SHARE MODE LOCK OF
+WITH NOWAIT IS INTERVAL SUBSTRING DIV MOD LSH RSH BIT_AND BIT_OR GE GT LE LT EQ
+NEQ MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
+SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND HOUR_MICROSECOND HOUR_SECOND
+HOUR_MINUTE DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR YEAR_MONTH FALSE TRUE
+DUPLICATE PLUS MINUS NOT_DISTINCT_OP COUNT SUM AVG MIN MAX
 
 
 %left OR CONCAT_OP
-%left XOR
 %left AND
 %nonassoc NOT
 %nonassoc BETWEEN CASE (* WHEN THEN ELSE *) (* never useful *)
@@ -113,37 +109,6 @@ statement:
     {
       Set (name, e)
     }
-  | CREATE or_replace? FUNCTION name=IDENT params=sequence(func_parameter)
-RETURNS ret=sql_type
-routine_extra?
-AS? routine_body
-routine_extra?
-    {
-      Function.add (List.length params) (Ret ret) name;
-      CreateRoutine (name, Some ret, params)
-    }
-  | CREATE or_replace? PROCEDURE name=IDENT params=sequence(proc_parameter)
-routine_extra?
-AS? routine_body
-routine_extra?
-    {
-      Function.add (List.length params) (Ret Any) name; (* FIXME void *)
-      CreateRoutine (name, None, params)
-    }
-
-parameter_default_: DEFAULT | EQUAL { }
-parameter_default: parameter_default_ e=expr { e }
-func_parameter: n=IDENT AS? t=sql_type e=parameter_default? { (n,t,e) }
-parameter_mode: IN | OUT | INOUT { }
-proc_parameter: parameter_mode? p=func_parameter { p }
-
-or_replace: OR REPLACE { }
-
-routine_body: TEXT | compound_stmt { }
-compound_stmt: BEGIN statement+ END { } (* mysql *)
-
-routine_extra: LANGUAGE IDENT { }
-  | COMMENT TEXT { }
 
 table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
 index_prefix: LPAREN n=INTEGER RPAREN { n }
@@ -260,7 +225,7 @@ expr:
   | e1=expr NOT IN l=sequence(expr) { mk_not @@ Fun (`In, [e1; Sequence l]) }
   | e1=expr IN LPAREN select=select_stmt RPAREN { Fun (`In, [e1; Select (select, `AsValue)]) }
   | e1=expr NOT IN LPAREN select=select_stmt RPAREN { mk_not @@ Fun (`In, [e1; Select (select, `AsValue)]) }
-  | e1=expr IN table=IDENT { Tables.check table; e1 }
+  | e1=expr IN IDENT { e1 }
   | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
   | PARAM { Param ($1,Any) }
   | p=PARAM LCURLY l=choices c2=RCURLY { let (name,(p1,_p2)) = p in Choices ((name,(p1,c2+1)),l) }
@@ -360,31 +325,13 @@ interval_unit: MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUART
   | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
   | YEAR_MONTH { }
 
-sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
-  | binary { Blob }
-  | NATIONAL? text VARYING? charset? collate? { Text }
-  | ENUM sequence(TEXT) charset? collate? { Text }
-  | T_FLOAT PRECISION? { Float }
-  | T_BOOLEAN { Bool }
-  | T_DATETIME | YEAR | DATE | TIME | TIMESTAMP { Datetime }
-  | T_UUID { Type.Blob }
-
-binary: T_BLOB | BINARY | BINARY VARYING { }
-text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
-
 %inline either(X,Y): X | Y { }
 %inline commas(X): l=separated_nonempty_list(COMMA,X) { l }
 (* (x1,x2,...,xn) *)
 %inline sequence_(X): LPAREN l=commas(X) { l }
 %inline sequence(X): l=sequence_(X) RPAREN { l }
 
-charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASCII | UNICODE { }
 collate: COLLATE IDENT { }
-
-sql_type: t=sql_type_flavor
-  | t=sql_type_flavor LPAREN INTEGER RPAREN UNSIGNED?
-  | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
-    { t }
 
 compound_op: UNION ALL? | EXCEPT | INTERSECT { }
 
