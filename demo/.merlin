@@ -1,4 +1,0 @@
-S .
-B .
-B ../impl/ocaml
-B ../impl/ocaml/mysql
