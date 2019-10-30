@@ -29,11 +29,13 @@ let keywords =
    "between",BETWEEN;
    "by",BY;
    "case", CASE;
+   "cast", CAST;
    "collate",COLLATE;
    "count", COUNT;
    "cross",CROSS;
    "date",DATE;
    "day", DAY;
+   "days", DAY;
    "day_hour", DAY_HOUR;
    "day_microsecond", DAY_MICROSECOND;
    "day_minute", DAY_MINUTE;
@@ -97,6 +99,7 @@ let keywords =
    "where",WHERE;
    "with", WITH;
    "year", YEAR;
+   "years", YEAR;
    "year_month", YEAR_MONTH;
  ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in

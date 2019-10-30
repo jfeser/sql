@@ -63,6 +63,8 @@ type bit_op = [ `Bit_and | `Bit_not | `Bit_or | `Lsh | `Rsh ]
 
 type agg_op = [ `Count | `Avg | `Sum | `Min | `Max ] [@@deriving compare, sexp]
 
+type date_op = [ `Day | `Year ] [@@deriving compare, sexp]
+
 type binop =
   [ `Add
   | `And
@@ -86,6 +88,7 @@ type op =
   | cmp_op
   | bit_op
   | agg_op
+  | date_op
   | `Between
   | `Call of string
   | `Concat

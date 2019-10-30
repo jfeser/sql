@@ -34,8 +34,8 @@ Simple SQL parser
 %token <float> FLOAT
 %token <Sql.param_id> PARAM
 %token <int> LCURLY RCURLY
-%token ALL AND ANY AS ASC ASTERISK AVG BETWEEN BIT_AND BIT_OR BY CASE COLLATE
-COMMA CONCAT_OP COUNT CROSS DATE DAY DAY_HOUR DAY_MICROSECOND DAY_MINUTE
+%token ALL AND ANY AS ASC ASTERISK AVG BETWEEN BIT_AND BIT_OR BY CASE CAST
+COLLATE COMMA CONCAT_OP COUNT CROSS DATE DAY DAY_HOUR DAY_MICROSECOND DAY_MINUTE
 DAY_SECOND DESC DISTINCT DIV DOT ELSE END EOF EQ EQUAL EXCEPT EXISTS FALSE FOR
 FROM GE GROUP GT HAVING HOUR HOUR_MICROSECOND HOUR_MINUTE HOUR_SECOND IF IN
 INTERSECT INTERVAL IS JOIN JOIN_TYPE1 JOIN_TYPE2 LE LIKE LIKE_OP LIMIT LPAREN
@@ -166,6 +166,8 @@ expr:
   | LPAREN expr RPAREN { $2 }
   | attr_name collate? { Column $1 }
   | VALUES LPAREN n=IDENT RPAREN { Inserted n }
+  | x = INTEGER; DAY { Fun (`Day, [Value (Int x)]) }
+  | x = INTEGER; YEAR { Fun (`Year, [Value (Int x)]) }
   | v=literal_value { Value v }
   | e1=expr IN l=sequence(expr) { Fun (`In, [e1; Sequence l]) }
   | e1=expr NOT IN l=sequence(expr) { mk_not @@ Fun (`In, [e1; Sequence l]) }
@@ -234,7 +236,8 @@ literal_value:
   | FALSE { Bool false }
   | DATE; x = TEXT
   | TIME; x = TEXT
-  | TIMESTAMP; x = TEXT { Date x }
+  | TIMESTAMP; x = TEXT
+  | CAST LPAREN x=TEXT AS DATE RPAREN { Date x }
   | NULL { Null }
 
 expr_list: l=commas(expr) { l }
@@ -269,7 +272,8 @@ unary_op:
   | TILDE { `Bit_not }
   | NOT { `Not }
 
-interval_unit: MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUARTER | YEAR
+interval_unit:
+  | MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUARTER | YEAR
   | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
   | HOUR_MICROSECOND | HOUR_SECOND | HOUR_MINUTE
   | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
