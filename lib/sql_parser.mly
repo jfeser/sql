@@ -5,17 +5,28 @@ Simple SQL parser
 
 %{
     open Sql
+    module Header = struct
+      open Base
 
-    (* preserve order *)
-    let make_limit l =
-      let param = function
-        | _, `Const _ -> None
-        | x, `Param (None,pos) -> Some ((Some (match x with `Limit -> "limit" | `Offset -> "offset"),pos), Type.Int)
-        | _, `Param p -> Some (p, Type.Int)
-      in
-      List.filter_map param l, List.mem (`Limit,`Const 1) l
+      (* preserve order *)
+      let make_limit l =
+        let param = function
+          | _, `Const _ -> None
+          | x, `Param (None,pos) -> Some ((Some (match x with `Limit -> "limit" | `Offset -> "offset"),pos), Type.Int)
+          | _, `Param p -> Some (p, Type.Int)
+        in
+        List.filter_map ~f:param l, List.mem ~equal:Poly.(=) l (`Limit,`Const 1)
 
-    let mk_not x = Fun (`Not, [x])
+      let mk_not x = Fun (`Not, [x])
+
+      let with_clauses = Base.Hashtbl.create (module String)
+
+      let add_with n q =
+        Base.Hashtbl.add_exn with_clauses ~key:n ~data:q
+
+      let find_with n = Base.Hashtbl.find with_clauses n
+    end
+    include Header
 %}
 
 %token <int> INTEGER
@@ -59,76 +70,40 @@ DUPLICATE PLUS MINUS NOT_DISTINCT_OP COUNT SUM AVG MIN MAX
 
 %%
 
+%inline either(X,Y): X | Y { }
+%inline commas(X): l=separated_nonempty_list(COMMA,X) { l }
+(* (x1,x2,...,xn) *)
+%inline sequence_(X): LPAREN l=commas(X) { l }
+%inline sequence(X): l=sequence_(X) RPAREN { l }
+
 input: statement EOF { $1 }
 
-if_not_exists: IF NOT EXISTS { }
-if_exists: IF EXISTS {}
-
-statement: 
-  | CREATE either(TABLE,VIEW) name=IDENT AS select=maybe_parenth(select_stmt)
-    {
-      Create (name,`Select select)
-    }
-  | RENAME TABLE l=separated_nonempty_list(COMMA, separated_pair(IDENT,TO,IDENT)) { Rename l }
-  | DROP either(TABLE,VIEW) if_exists? name=IDENT
-    {
-      Drop name
-    }
-  | CREATE UNIQUE? INDEX if_not_exists? name=table_name ON table=table_name cols=sequence(index_column)
-    {
-      CreateIndex (name, table, cols)
-    }
+statement:
   | select_stmt { Select $1 }
-  | insert_cmd target=IDENT names=sequence(IDENT)? VALUES values=commas(sequence(expr))? ss=on_duplicate?
-    {
-      Insert { target; action=`Values (names, values); on_duplicate=ss; }
-    }
-  | insert_cmd target=IDENT names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=on_duplicate?
-    {
-      Insert { target; action=`Select (names, select); on_duplicate=ss; }
-    }
-  | insert_cmd target=IDENT SET set=commas(set_column)? ss=on_duplicate?
-    {
-      Insert { target; action=`Set set; on_duplicate=ss; }
-    }
-  | update_cmd table=IDENT SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
-    {
-      Update (table,ss,w,o,lim)
-    }
-/* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
-  | update_cmd tables=commas(source) SET ss=commas(set_column) w=where?
-    {
-      UpdateMulti (tables,ss,w)
-    }
-  | DELETE FROM table=IDENT w=where?
-    {
-      Delete (table,w)
-    }
-  | SET name=IDENT EQUAL e=expr
-    {
-      Set (name, e)
-    }
-
-table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
-index_prefix: LPAREN n=INTEGER RPAREN { n }
-index_column: name=IDENT index_prefix? collate? order_type? { name }
 
 (* ugly, can you fixme? *)
 (* ignoring everything after RPAREN (NB one look-ahead token) *)
 
-select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking?
+with_clause: WITH separated_nonempty_list(COMMA, with_body) {}
+with_body:
+  | id=IDENT AS LPAREN q=select_stmt RPAREN { add_with id q }
+
+select_stmt:
+  | with_clause? s=select_core other=list(preceded(compound_op,select_core)) o=loption(order) lim=limit_t? 
     {
-      { select = ($1, other); order=o; limit=lim; }
+      { select = (s, other); order=o; limit=lim; }
     }
 
-select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(group) h=having?
+select_core:
+  | SELECT select_type? r=commas(column1) f=from? w=where? g=loption(group) h=having?
     {
       { columns=r; from=f; where=w; group=g; having=h; }
     }
 
 table_list: src=source joins=join_source* { (src,joins) }
 
-join_source: NATURAL maybe_join_type JOIN src=source { src,`Natural }
+join_source:
+  | NATURAL maybe_join_type JOIN src=source { src,`Natural }
   | CROSS JOIN src=source { src,`Cross }
   | qualified_join src=source cond=join_cond { src,cond }
 
@@ -138,31 +113,19 @@ join_cond: ON e=expr { `Search e }
   | USING l=sequence(IDENT) { `Using l }
   | (* *) { `Default }
 
-source1: IDENT { `Table $1 }
+source1:
+  | id=IDENT
+    {
+      match find_with id with
+      | Some s -> `Select s
+      | None -> `Table id
+    }
   | LPAREN s=select_stmt RPAREN { `Select s }
   | LPAREN s=table_list RPAREN { `Nested s }
 
 source: src=source1 alias=maybe_as { src, alias }
 
-insert_cmd: INSERT DELAYED? OR? conflict_algo INTO | INSERT INTO | REPLACE INTO { }
-update_cmd: UPDATE | UPDATE OR conflict_algo { }
-conflict_algo: CONFLICT_ALGO | REPLACE { }
-on_duplicate: ON DUPLICATE KEY UPDATE ss=commas(set_column) { ss }
-
 select_type: DISTINCT | ALL { }
-
-select_row_locking:
-for_update_or_share+
-    { }
-  | LOCK IN SHARE MODE
-    { }
-
-for_update_or_share:
-FOR either(UPDATE, SHARE) update_or_share_of? NOWAIT? with_lock? { }
-
-update_or_share_of: OF commas(IDENT) { }
-
-with_lock: WITH LOCK { }
 
 int_or_param: i=INTEGER { `Const i }
   | p=PARAM { `Param p }
@@ -170,8 +133,6 @@ int_or_param: i=INTEGER { `Const i }
 limit_t: LIMIT lim=int_or_param { make_limit [`Limit,lim] }
   | LIMIT ofs=int_or_param COMMA lim=int_or_param { make_limit [`Offset,ofs; `Limit,lim] }
   | LIMIT lim=int_or_param OFFSET ofs=int_or_param { make_limit [`Limit,lim; `Offset,ofs] }
-
-limit: limit_t { fst $1 }
 
 order: ORDER BY l=commas(pair(expr,order_type?)) { l }
 order_type:
@@ -191,13 +152,7 @@ column1:
 maybe_as: AS? name=IDENT { Some name }
   | { None }
 
-maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
-
-set_column: name=attr_name EQUAL e=expr { name,e }
-
 anyall: ANY | ALL | SOME { }
-
-mnot(X): NOT x = X | x = X { x }
 
 attr_name: cname=IDENT { { cname; tname=None} }
   | table=IDENT DOT cname=IDENT
@@ -326,12 +281,6 @@ interval_unit: MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUART
   | HOUR_MICROSECOND | HOUR_SECOND | HOUR_MINUTE
   | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
   | YEAR_MONTH { }
-
-%inline either(X,Y): X | Y { }
-%inline commas(X): l=separated_nonempty_list(COMMA,X) { l }
-(* (x1,x2,...,xn) *)
-%inline sequence_(X): LPAREN l=commas(X) { l }
-%inline sequence(X): l=sequence_(X) RPAREN { l }
 
 collate: COLLATE IDENT { }
 
