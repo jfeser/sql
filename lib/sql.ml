@@ -94,7 +94,6 @@ type op =
   | `Is
   | `IsDistinct
   | `IsNull
-  | `Ite
   | `Like
   | `NotDistinct
   | `Substring ]
@@ -196,6 +195,7 @@ and 'f expr =
   | Param of param
   | Choices of param_id * 'f expr choices
   | Fun of 'f * 'f expr list  (** parameters *)
+  | Case of ('f expr * 'f expr) list * 'f expr option
   | Select of 'f select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string  (** inserted value *)

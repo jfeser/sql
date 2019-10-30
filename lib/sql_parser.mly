@@ -44,7 +44,7 @@ WITH NOWAIT IS INTERVAL SUBSTRING DIV MOD LSH RSH BIT_AND BIT_OR GE GT LE LT EQ
 NEQ MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
 SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND HOUR_MICROSECOND HOUR_SECOND
 HOUR_MINUTE DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR YEAR_MONTH FALSE TRUE
-DUPLICATE PLUS MINUS NOT_DISTINCT_OP COUNT SUM AVG MIN MAX
+DUPLICATE PLUS MINUS NOT_DISTINCT_OP COUNT SUM AVG MIN MAX END
 
 
 %left OR CONCAT_OP
@@ -203,21 +203,27 @@ expr:
   | MAX LPAREN e = expr RPAREN { Fun (`Max, [e]) }
   | SUM LPAREN e = expr RPAREN { Fun (`Sum, [e]) }
   | AVG LPAREN e = expr RPAREN { Fun (`Avg, [e]) }
-  /* | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *) */
-  /*   { */
-  /*     let maybe f = function None -> [] | Some x -> [f x] in */
-  /*     let t_args = */
-  /*       match e1 with */
-  /*       | None -> (List.flatten @@ List.map (fun _ -> [Typ Bool; Var 1]) branches) */
-  /*       | Some _ -> [Var 0] @ (List.flatten @@ List.map (fun _ -> [Var 0; Var 1]) branches) */
-  /*     in */
-  /*     let t_args = t_args @ maybe (fun _ -> Var 1) e2 in */
-  /*     let v_args = maybe Prelude.identity e1 @ List.flatten branches @ maybe Prelude.identity e2 in */
-  /*     Fun (F (Var 1, t_args), v_args) */
-  /*   } */
-  | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun (`Ite, [e1;e2;e3]) }
+  | e=case { e }
+  | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN
+    {
+      Case ([(e1, e2)], Some e3)
+    }
 
-case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
+case:
+    (* Simple CASE *)
+  | CASE e1=expr branches=nonempty_list(case_branch) e2=preceded(ELSE, expr)? END
+    {
+      let branches = List.map (fun (v, x) -> Fun (`Eq, [e1; v]), x) branches in
+      Case (branches, e2)
+    }
+(* Normal CASE *)
+  | CASE branches=nonempty_list(case_branch) e2=preceded(ELSE, expr)? END
+    {
+      Case (branches, e2)
+    }
+
+case_branch: WHEN e1=expr THEN e2=expr { (e1, e2) }
+
 like: LIKE | LIKE_OP { }
 
 choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }

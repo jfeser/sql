@@ -20,6 +20,7 @@ let advance_line lexbuf =
 
 let keywords =
   let k = ref [
+   "end",END;
    "as",AS;
    "on",ON;
    "to",TO;
