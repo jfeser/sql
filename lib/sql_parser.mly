@@ -5,7 +5,6 @@ Simple SQL parser
 
 %{
     open Sql
-    open ExtLib
 
     (* preserve order *)
     let make_limit l =
@@ -267,7 +266,10 @@ case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
 like: LIKE | LIKE_OP { }
 
 choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
-choice: name=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ((name, (c1+1,c2)),e) }
+choice: name=IDENT? e=choice_body?
+    {
+      let (c1,e,c2) = Option.value ~default:(0,None,0) e in ((name, (c1+1,c2)),e)
+    }
 choices: separated_nonempty_list(BIT_OR,choice) { $1 }
 
 literal_value:
@@ -315,7 +317,7 @@ boolean_bin_op:
   | AND {`And}
   | OR {`Or}
 
-unary_op: 
+unary_op:
   | TILDE { `Bit_not }
   | NOT { `Not }
 

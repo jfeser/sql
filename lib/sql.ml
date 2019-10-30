@@ -1,7 +1,6 @@
 (** *)
 
 open Printf
-open ExtLib
 
 module Type = struct
   type t = Int | Text | Blob | Float | Bool | Datetime | Any
@@ -115,13 +114,6 @@ module Schema = struct
     | [] -> raise (Error (t, "missing attribute : " ^ name))
     | _ -> raise (Error (t, "duplicate attribute : " ^ name))
 
-  let make_unique =
-    List.unique ~cmp:(fun a1 a2 -> a1.name = a2.name && a1.name <> "")
-
-  let is_unique t = List.length (make_unique t) = List.length t
-
-  let check_unique t = is_unique t || raise (Error (t, "duplicate attributes"))
-
   let project names t = List.map (find t) names
 
   let change_inplace t before after =
@@ -153,12 +145,6 @@ module Schema = struct
       raise (Error (t, "type mismatch for attribute " ^ attr.name))
 
   let sub l a = List.filter (fun x -> not (List.mem x a)) l
-
-  let to_string v =
-    v
-    |> List.map (fun attr ->
-           sprintf "%s %s" (Type.to_string attr.domain) attr.name)
-    |> String.concat ", " |> sprintf "[%s]"
 
   let names t =
     t
@@ -201,42 +187,9 @@ module Schema = struct
                      (Type.to_string a2.domain) )))
       t1 t2
 
-  let check_types t1 t2 =
-    try check_types t1 t2
-    with List.Different_list_size _ ->
-      raise (Error (t1, to_string t1 ^ " differs in size to " ^ to_string t2))
-
   let compound t1 t2 =
     check_types t1 t2;
     t1
-
-  let add t col pos =
-    match find_by_name t col.name with
-    | [] -> (
-        match pos with
-        | `First -> col :: t
-        | `Default -> t @ [ col ]
-        | `After name -> (
-            try
-              let i, _ = List.findi (fun _ attr -> by_name name attr) t in
-              let l1, l2 = List.split_nth (i + 1) t in
-              l1 @ (col :: l2)
-            with Not_found ->
-              raise
-                (Error
-                   ( t,
-                     "Can't insert column " ^ col.name
-                     ^ " after non-existing column " ^ name )) ) )
-    | _ -> raise (Error (t, "Already has column " ^ col.name))
-
-  let drop t col =
-    ignore (find t col);
-    List.remove_if (by_name col) t
-
-  let change t oldcol col pos =
-    match pos with
-    | `Default -> change_inplace t oldcol col
-    | `First | `After _ -> add (drop t oldcol) col pos
 
   let to_string = show
 
@@ -300,14 +253,6 @@ include Op
 type table = string * Schema.t [@@deriving show]
 
 type schema = Schema.t
-
-let print_table out (name, schema) =
-  IO.write_line out name;
-  schema
-  |> List.iter (fun { name; domain; extra } ->
-         IO.printf out "%10s %s %s\n" (Type.to_string domain) name
-           (Constraints.show extra));
-  IO.write_line out ""
 
 type param_id = string option * (int * int) [@@deriving show]
 (** optional name and start/end position in string *)

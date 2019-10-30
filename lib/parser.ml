@@ -1,3 +1,6 @@
+open! Base
+open! Stdio
+
 exception Error of exn * (int * int * string * string)
 
 let parse_buf_exn lexbuf =
@@ -19,7 +22,6 @@ let parse_string str =
   parse_buf (Lexing.from_string str)
 
 let parse_file filename =
-  let contents = try Std.input_file filename with _ -> "" in
-  parse_string contents
+  In_channel.(with_file filename ~f:input_all) |> parse_string
 
 let parse_stmt stmt = parse_buf_exn (Lexing.from_string stmt)
