@@ -61,7 +61,7 @@ TIMESTAMP TRUE UNION USING VALUES WEEK WHEN WHERE WITH YEAR YEAR_MONTH
 
 %type <Sql.op Sql.expr> expr
 
-%start <Sql.op Sql.stmt> input
+%start <Sql.op Sql.query> input
 
 %%
 
@@ -71,25 +71,26 @@ TIMESTAMP TRUE UNION USING VALUES WEEK WHEN WHERE WITH YEAR YEAR_MONTH
 %inline sequence_(X): LPAREN l=commas(X) { l }
 %inline sequence(X): l=sequence_(X) RPAREN { l }
 
-input: statement EOF { $1 }
-
-statement:
-  | select_stmt { Select $1 }
+input: query EOF { $1 }
 
 with_clause: WITH separated_nonempty_list(COMMA, with_body) {}
 with_body:
-  | id=IDENT AS LPAREN q=select_stmt RPAREN { add_with id q }
+  | id=IDENT AS LPAREN q=query RPAREN { add_with id q }
 
-select_stmt:
-  | with_clause? s=select_core other=list(preceded(compound_op,select_core)) o=loption(order) lim=limit_t? 
+query:
+  | with_clause? c=clauses o=loption(order) lim=limit_t?
     {
-      { select = (s, other); order=o; limit=lim; }
+      { clauses=c; order=o; limit=lim; }
     }
 
-select_core:
-  | SELECT select_type? r=commas(column1) f=from? w=where? g=loption(group) h=having?
+clauses:
+  | s=select { Clause (s, None) }
+  | s=select op=compound_op c=clauses { Clause (s, Some (op, c)) }
+
+select:
+  | SELECT d=select_type r=commas(column1) f=from? w=where? g=loption(group) h=having?
     {
-      { columns=r; from=f; where=w; group=g; having=h; }
+      { distinct=d; columns=r; from=f; where=w; group=g; having=h; }
     }
 
 table_list: src=source joins=join_source* { (src,joins) }
@@ -109,15 +110,15 @@ source1:
   | id=IDENT
     {
       match find_with id with
-      | Some s -> `Select s
+      | Some s -> `Subquery s
       | None -> `Table id
     }
-  | LPAREN s=select_stmt RPAREN { `Select s }
+  | LPAREN s=query RPAREN { `Subquery s }
   | LPAREN s=table_list RPAREN { `Nested s }
 
 source: src=source1 alias=maybe_as { src, alias }
 
-select_type: DISTINCT | ALL { }
+select_type: DISTINCT { true } | ALL { false } | { false }
 
 int_or_param: i=INTEGER { `Const i }
   | p=PARAM { `Param p }
@@ -171,10 +172,10 @@ expr:
   | v=literal_value { Value v }
   | e1=expr IN l=sequence(expr) { Fun (`In, [e1; Sequence l]) }
   | e1=expr NOT IN l=sequence(expr) { mk_not @@ Fun (`In, [e1; Sequence l]) }
-  | e1=expr IN LPAREN select=select_stmt RPAREN { Fun (`In, [e1; Select (select, `AsValue)]) }
-  | e1=expr NOT IN LPAREN select=select_stmt RPAREN { mk_not @@ Fun (`In, [e1; Select (select, `AsValue)]) }
+  | e1=expr IN LPAREN q=query RPAREN { Fun (`In, [e1; Subquery (q, `AsValue)]) }
+  | e1=expr NOT IN LPAREN q=query RPAREN { mk_not @@ Fun (`In, [e1; Subquery (q, `AsValue)]) }
   | e1=expr IN IDENT { e1 }
-  | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
+  | LPAREN q=query RPAREN { Subquery (q, `AsValue) }
   | PARAM { Param ($1,Any) }
   | p=PARAM LCURLY l=choices c2=RCURLY { let (name,(p1,_p2)) = p in Choices ((name,(p1,c2+1)),l) }
   | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
@@ -189,8 +190,8 @@ expr:
   | e1=expr IS NOT DISTINCT FROM e2=expr { mk_not @@ Fun (`IsDistinct, [e1;e2]) }
   | expr BETWEEN expr AND expr { Fun(`Between, [$1;$3;$5]) }
   | e1=expr; NOT; BETWEEN; e2=expr; AND; e3=expr { Fun (`Not, [Fun(`Between, [e1;e2;e3])]) }
-  | EXISTS; LPAREN select=select_stmt RPAREN { Select (select,`Exists) }
-  | NOT; EXISTS; LPAREN select=select_stmt RPAREN { Fun (`Not, [Select (select, `Exists)]) }
+  | EXISTS; LPAREN q=query RPAREN { Subquery (q,`Exists) }
+  | NOT; EXISTS; LPAREN q=query RPAREN { Fun (`Not, [Subquery (q, `Exists)]) }
   | COUNT LPAREN e = expr RPAREN { Fun (`Count, [e]) }
   | COUNT LPAREN ASTERISK RPAREN { Fun (`Count, []) }
   | MIN LPAREN e = expr RPAREN { Fun (`Min, [e]) }
@@ -281,7 +282,11 @@ interval_unit:
 
 collate: COLLATE IDENT { }
 
-compound_op: UNION ALL? | EXCEPT | INTERSECT { }
+compound_op:
+  | UNION { `Union }
+  | UNION ALL { `UnionAll }
+  | EXCEPT { `Except }
+  | INTERSECT { `Intersect }
 
 maybe_join_type: JOIN_TYPE1? JOIN_TYPE2? { }
 

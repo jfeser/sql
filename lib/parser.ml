@@ -74,4 +74,4 @@ let get_statements ch =
       | None -> None
       | Some sql -> Some (parse_stmt sql, ())
       | exception e -> failwith (sprintf "lexer failed (%s)" (Exn.to_string e)))
-  |> Sequence.memoize
+  |> Sequence.force_eagerly

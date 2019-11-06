@@ -66,18 +66,7 @@ type agg_op = [ `Count | `Avg | `Sum | `Min | `Max ] [@@deriving compare, sexp]
 type date_op = [ `Day | `Year ] [@@deriving compare, sexp]
 
 type binop =
-  [ `Add
-  | `And
-  | `Div
-  | `Eq
-  | `Ge
-  | `Gt
-  | `Le
-  | `Lt
-  | `Mod
-  | `Mul
-  | `Or
-  | `Sub ]
+  [ `Add | `And | `Div | `Eq | `Ge | `Gt | `Le | `Lt | `Mod | `Mul | `Or | `Sub ]
 [@@deriving compare, sexp]
 
 type unop = [ `IsNull | `Not ] [@@deriving compare, sexp]
@@ -111,9 +100,7 @@ type param = param_id * Type.t [@@deriving compare, sexp]
 
 type params = param list [@@deriving compare, sexp]
 
-type ctor =
-  | Simple of param_id * var list option
-  | Verbatim of string * string
+type ctor = Simple of param_id * var list option | Verbatim of string * string
 
 and var = Single of param | Choice of param_id * ctor list
 [@@deriving compare, sexp]
@@ -165,7 +152,7 @@ type 'f nested = 'f source * ('f source * 'f join_cond) list
 [@@deriving compare, sexp]
 
 and 'f source1 =
-  [ `Select of 'f select_full | `Table of string | `Nested of 'f nested ]
+  [ `Subquery of 'f query | `Table of string | `Nested of 'f nested ]
 [@@deriving compare, sexp]
 
 and 'f source = 'f source1 * string option [@@deriving compare, sexp]
@@ -180,14 +167,17 @@ and 'f select = {
   where : 'f expr option;
   group : 'f expr list;
   having : 'f expr option;
+  distinct : bool;
 }
 [@@deriving compare, sexp]
 
-and 'f select_full = {
-  select : 'f select * 'f select list;
-  order : 'f order;
-  limit : limit option;
-}
+and 'f query = { clauses : 'f clauses; order : 'f order; limit : limit option }
+[@@deriving compare, sexp]
+
+and 'f clauses =
+  | Clause of
+      'f select
+      * ([ `Union | `UnionAll | `Intersect | `Except ] * 'f clauses) option
 [@@deriving compare, sexp]
 
 and 'f order = ('f expr * direction option) list [@@deriving compare, sexp]
@@ -199,7 +189,7 @@ and 'f expr =
   | Choices of param_id * 'f expr choices
   | Fun of 'f * 'f expr list  (** parameters *)
   | Case of ('f expr * 'f expr) list * 'f expr option
-  | Select of 'f select_full * [ `AsValue | `Exists ]
+  | Subquery of 'f query * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string  (** inserted value *)
 [@@deriving compare, sexp]
@@ -208,44 +198,4 @@ and 'f column =
   | All
   | AllOf of string
   | Expr of 'f expr * string option  (** name *)
-[@@deriving compare, sexp]
-
-type 'f columns = 'f column list [@@deriving compare, sexp]
-
-type 'f expr_q =
-  [ `Value of Type.t  (** literal value *)
-  | `Param of param
-  | `Choice of param_id * 'f expr_q choices
-  | `Func of Type.func * 'f expr_q list
-    (** return type, grouping, parameters *) ]
-[@@deriving compare, sexp]
-
-type 'f assignments = (col_name * 'f expr) list [@@deriving compare, sexp]
-
-type 'f insert_action = {
-  target : string;
-  action :
-    [ `Set of 'f assignments option
-    | `Values of string list option * 'f expr list list option
-    | (* column names * list of value tuples *)
-      `Select of
-      string list option * 'f select_full ];
-  on_duplicate : 'f assignments option;
-}
-[@@deriving compare, sexp]
-
-type 'f stmt =
-  | Create of string * [ `Schema of schema | `Select of 'f select_full ]
-  | Drop of string
-  | Alter of string * alter_action list
-  | Rename of (string * string) list
-  | CreateIndex of string * string * string list (* index name, table name, columns *)
-  | Insert of 'f insert_action
-  | Delete of string * 'f expr option
-  | Set of string * 'f expr
-  | Update of string * 'f assignments * 'f expr option * 'f order * param list (* where, order, limit *)
-  | UpdateMulti of 'f source list * 'f assignments * 'f expr option
-  | Select of 'f select_full
-  | CreateRoutine of
-      string * Type.t option * (string * Type.t * 'f expr option) list
 [@@deriving compare, sexp]
