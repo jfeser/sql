@@ -26,25 +26,14 @@ remove: [
 ]
 depends: [
   "ocaml" {>= "4.02.0"}
-  "ocamlfind" {build}
-  "ocamlbuild" {build}
-  "mybuild" {build}
+  "dune"  {build}
   "menhir"
-  "ppx_deriving"
-  ("extlib" | "extlib-compat")
-  "base-unix"
-  "ounit"
+  "base"
+  "stdio"
+  "ppx_sexp_conv"
+  "ppx_compare"
 ]
-depopts: [
-  "mariadb"
-  "mysql"
-  "sqlite3"
-]
-synopsis: "SQL Guided (code) Generator"
+synopsis: "SQL Parser"
 description: """
-sqlgg is an SQL query parser and binding code generator for C#, C++, Java, OCaml.
-It starts off with SQL schema and queries, and generates code (or XML, allowing
-further code generation for various purposes). Generated code only defines a mapping
-of output columns and query parameters to the host language, trying to be as unobtrusive
-as possible and leaving the choice of SQL database (and API to access it) to the developer."""
-flags: light-uninstall
+Just a SQL parser. Based on sqlgg.
+"""
